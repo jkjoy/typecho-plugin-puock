@@ -1,6 +1,3 @@
-<?php
-header('Content-Type: text/html; charset=UTF-8');
-?>
         <!-- 分享至第三方 -->
         <div class="d-flex justify-content-center w-100">
             <div data-id="wb" class="share-to circle-button circle-sm circle-hb text-center bg-danger text-light">

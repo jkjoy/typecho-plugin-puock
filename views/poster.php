@@ -1,6 +1,3 @@
-<?php
-header('Content-Type: text/html; charset=UTF-8');
-?>
     <div class="post-poster">
         <div class="post-poster-main" id="post-poster-main">
             <div class="cover">

@@ -126,20 +126,22 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
     // 获取文章封面
     private function getPostCover($post)
     {
-        // 尝试从内容中提取第一张图片
-        preg_match('/<img.+?src=[\'\"]([^\'\"]+)[\'\"].*?>/i', $post->content, $matches);
-        $cover = !empty($matches[1]) ? $matches[1] : '';
-        
-        // 如果没有找到图片，使用默认图片
+        // 1. 优先使用自定义字段 cover
+        if (isset($post->fields) && isset($post->fields->cover) && !empty($post->fields->cover)) {
+            $cover = $post->fields->cover;
+        } else {
+            // 2. 尝试从内容中提取第一张图片（增强正则兼容性）
+            $cover = '';
+            if (!empty($post->content)) {
+                if (preg_match('/<img[^>]+src=["\']?([^"\' >]+)["\' >]/i', $post->content, $matches)) {
+                    $cover = $matches[1];
+                }
+            }
+        }
+        // 3. 如果没有找到图片，使用默认图片
         if (empty($cover)) {
             $cover = $this->options->themeUrl . '/assets/img/cover.png';
         }
-        
-        // 处理相对路径
-        if (strpos($cover, 'http') !== 0) {
-            $cover = $this->options->siteUrl . ltrim($cover, '/');
-        }
-        
         return $cover;
     }
     

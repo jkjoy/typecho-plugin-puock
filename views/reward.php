@@ -1,6 +1,3 @@
-<?php
-header('Content-Type: text/html; charset=UTF-8');
-?>
         <div class="p-flex-sbc">
             <?php if (!empty($pluginConfig->alipay_qr)): ?>
             <div class="mr10" id="reward-alipay">

@@ -6,7 +6,7 @@
   * 用于获取海报,分享二维码,赞赏,emoji等功能
   * @package Puock
   * @author 老孙博客
-  * @version 1.0.0
+  * @version 1.0.2
   * @link https://www.imsun.org
   */
  class Puock_Plugin implements Typecho_Plugin_Interface
@@ -24,8 +24,6 @@
          Helper::addRoute('share_reward_route_poster_index', '/index.php/poster/[cid]/', 'Puock_Action', 'poster');
          Helper::addRoute('share_reward_route_emoji', '/emoji/', 'Puock_Action', 'emoji');
          Helper::addRoute('share_reward_route_emoji_index', '/index.php/emoji/', 'Puock_Action', 'emoji');
-         
-         Typecho_Plugin::factory('Widget_Archive')->footer = array(__CLASS__, 'renderFooter');
          
          return '插件激活成功，请配置二维码信息';
      }
@@ -78,23 +76,4 @@
     // 个人用户的配置面板
     public static function personalConfig(Typecho_Widget_Helper_Form $form) {}
 
-    // 在文章页脚添加分享按钮
-    public static function renderFooter()
-    {
-        $options = Typecho_Widget::widget('Widget_Options');
-        $pluginUrl = $options->pluginUrl . '/Puock';
- 
-        // 只在文章页显示
-        if (Typecho_Widget::widget('Widget_Archive')->is('single')) {
-            $cid = Typecho_Widget::widget('Widget_Archive')->cid;
-            $title = Typecho_Widget::widget('Widget_Archive')->title;
-            $permalink = Typecho_Widget::widget('Widget_Archive')->permalink;
-            
-            // 生成分享按钮HTML
-            $html = <<<HTML
- 
-HTML;
-            echo $html;
-        }
-    }
 }
