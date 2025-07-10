@@ -70,6 +70,38 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
         $this->renderTemplate('emoji', []);
     }
 
+    //login
+    public function login()
+    {
+        // 渲染登录模板
+        $this->renderTemplate('login', []);
+    }
+
+    // AJAX 登录
+    public function ajaxlogin()
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        if ($this->request->isPost()) {
+            $name = $this->request->filter('trim')->name;
+            $password = $this->request->password;
+            $referer = $this->request->referer ? $this->request->referer : '/';
+            if (!$name || !$password) {
+                echo json_encode(['success' => false, 'msg' => '用户名或密码不能为空']);
+                exit;
+            }
+            $user = Typecho_Widget::widget('Widget_User');
+            try {
+                $user->login($name, $password, $this->request->remember ? 1 : 0);
+                echo json_encode(['success' => true, 'msg' => '登录成功', 'redirect' => $referer]);
+            } catch (Typecho_Exception $e) {
+                echo json_encode(['success' => false, 'msg' => $e->getMessage()]);
+            }
+        } else {
+            echo json_encode(['success' => false, 'msg' => '请求方式错误']);
+        }
+        exit;
+    }
+
     // 海报页面
     public function poster()
     {

@@ -3,10 +3,10 @@
  
  /**
   * Puock主题专用插件
-  * 用于获取海报,分享二维码,赞赏,emoji等功能
+  * 用于获取海报,分享二维码,赞赏,emoji,登录等功能
   * @package Puock
   * @author 老孙博客
-  * @version 1.0.2
+  * @version 1.2.0
   * @link https://www.imsun.org
   */
  class Puock_Plugin implements Typecho_Plugin_Interface
@@ -24,7 +24,11 @@
          Helper::addRoute('share_reward_route_poster_index', '/index.php/poster/[cid]/', 'Puock_Action', 'poster');
          Helper::addRoute('share_reward_route_emoji', '/emoji/', 'Puock_Action', 'emoji');
          Helper::addRoute('share_reward_route_emoji_index', '/index.php/emoji/', 'Puock_Action', 'emoji');
-         
+         Helper::addRoute('share_reward_route_login', '/login/', 'Puock_Action', 'login');
+         Helper::addRoute('share_reward_route_login_index', '/index.php/login/', 'Puock_Action', 'login');
+         Helper::addRoute('puock_ajaxlogin', '/ajaxlogin/', 'Puock_Action', 'ajaxlogin');
+         Helper::addRoute('puock_ajaxlogin_index', '/index.php/ajaxlogin/', 'Puock_Action', 'ajaxlogin');
+
          return '插件激活成功，请配置二维码信息';
      }
  
@@ -38,6 +42,12 @@
          Helper::removeRoute('share_reward_route_reward_nocid_index');
          Helper::removeRoute('share_reward_route_poster');
          Helper::removeRoute('share_reward_route_poster_index');
+         Helper::removeRoute('share_reward_route_emoji');
+         Helper::removeRoute('share_reward_route_emoji_index');
+        Helper::removeRoute('share_reward_route_login');
+        Helper::removeRoute('share_reward_route_login_index');
+        Helper::removeRoute('puock_ajaxlogin');
+        Helper::removeRoute('puock_ajaxlogin_index');
      }
     // 插件配置面板
     public static function config(Typecho_Widget_Helper_Form $form)
