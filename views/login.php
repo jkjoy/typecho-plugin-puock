@@ -1,6 +1,6 @@
 <div class="min-width-modal">
     <!-- 登录表单 -->
-<form id="front-login-form" action="<?php $this->options->loginAction(); ?>" method="post">
+<form id="front-login-form" action="/index.php/ajaxlogin/" method="post">
     <div class="mb15">
         <label for="_front_login_username" class="form-label">用户名/邮箱</label>
         <input type="text" name="name" class="form-control form-control-sm" id="_front_login_username"

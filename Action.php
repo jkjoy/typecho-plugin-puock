@@ -92,7 +92,12 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
             $user = Typecho_Widget::widget('Widget_User');
             try {
                 $user->login($name, $password, $this->request->remember ? 1 : 0);
-                echo json_encode(['success' => true, 'msg' => '登录成功', 'redirect' => $referer]);
+                // 修复：手动判断是否登录成功
+                if ($user->hasLogin()) {
+                    echo json_encode(['success' => true, 'msg' => '登录成功', 'redirect' => $referer]);
+                } else {
+                    echo json_encode(['success' => false, 'msg' => '用户名或密码错误']);
+                }
             } catch (Typecho_Exception $e) {
                 echo json_encode(['success' => false, 'msg' => $e->getMessage()]);
             }
