@@ -3,6 +3,8 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
 
 /**
  * 插件动作处理类
+ * @package Puock
+ * @author jkjoy
  */
 class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
 {
@@ -18,15 +20,35 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
     
     // 通过cid查数据库获取文章链接
     private function getPermalinkByCid($cid) {
-        $db = Typecho_Db::get();
-        $options = Helper::options();
-        $row = $db->fetchRow($db->select()->from('table.contents')->where('cid = ?', $cid)->limit(1));
-        if ($row && $row['type'] === 'post') {
-            // 兼容所有固定链接结构
-            $permalink = Typecho_Router::url('post', $row, $options->index);
-            return $permalink;
+        try {
+            $db = Typecho_Db::get();
+            $options = Helper::options();
+            $row = $db->fetchRow($db->select()->from('table.contents')
+                ->where('cid = ? AND type = ?', $cid, 'post')
+                ->where('status = ?', 'publish'));
+
+            if ($row) {
+                // 构建文章永久链接
+                $pattern = empty($options->permalink) ? '/{year}/{month}/{day}/{slug}.html' : $options->permalink;
+                $slug = urlencode($row['slug']);
+                $date = new DateTime($row['created']);
+                
+                $permalink = str_replace(
+                    array('{year}', '{month}', '{day}', '{slug}'),
+                    array($date->format('Y'), $date->format('m'), $date->format('d'), $slug),
+                    $pattern
+                );
+                
+                error_log('Puock Plugin - 生成文章链接：' . $permalink);
+                return rtrim($options->siteUrl, '/') . $permalink;
+            }
+            
+            error_log('Puock Plugin - 未找到文章或文章未发布：' . $cid);
+            return '';
+        } catch (Exception $e) {
+            error_log('Puock Plugin - 获取文章链接失败：' . $e->getMessage());
+            return '';
         }
-        return '';
     }
 
     // 分享页面
@@ -110,75 +132,164 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
     // 海报页面
     public function poster()
     {
-        $cid = $this->request->get('cid');
-        $post = $this->widget('Widget_Archive@post_' . $cid, "cid={$cid}");
-        
-        // 生成文章二维码
-        $qrCodePath = $this->generateQrCode($post->permalink, $cid);
-        
-        // 获取文章封面
-        $cover = $this->getPostCover($post);
-        
-        // 渲染海报模板
-        $this->renderTemplate('poster', [
-            'post' => $post,
-            'qrCodePath' => $qrCodePath,
-            'cover' => $cover,
-            'pluginConfig' => $this->pluginConfig
-        ]);
+        try {
+            $cid = $this->request->get('cid');
+            if (empty($cid)) {
+                throw new Exception('缺少文章ID参数');
+            }
+
+            // 获取文章数据
+            error_log('Puock Plugin - 尝试获取文章，CID：' . $cid);
+            
+            // 先尝试通过数据库直接验证文章是否存在
+            $db = Typecho_Db::get();
+            $row = $db->fetchRow($db->select()->from('table.contents')
+                ->where('cid = ? AND type = ?', $cid, 'post')
+                ->where('status = ?', 'publish'));
+                
+            if (!$row) {
+                error_log('Puock Plugin - 数据库中未找到文章：' . $cid);
+                throw new Exception('文章不存在或未发布：' . $cid);
+            }
+            
+            error_log('Puock Plugin - 数据库中找到文章：' . json_encode($row));
+            
+            // 获取文章详细数据
+            try {
+                $options = Helper::options();
+                // 构建完整的文章数据
+                $post = (object) array_merge($row, array(
+                    'permalink' => Typecho_Router::url('post', $row, $options->index),
+                    'fields' => array(),
+                    'categories' => array(),
+                    'title' => $row['title'],
+                    'cid' => $row['cid'],
+                    'content' => $row['text'],
+                    'status' => $row['status'],
+                    'type' => $row['type']
+                ));
+
+                // 获取文章自定义字段
+                $fields = $db->fetchAll($db->select()->from('table.fields')
+                    ->where('cid = ?', $cid));
+                if ($fields) {
+                    foreach ($fields as $field) {
+                        $post->fields[$field['name']] = $field['str_value'];
+                    }
+                }
+                
+                error_log('Puock Plugin - 已构建文章数据：' . json_encode($post));
+            } catch (Exception $e) {
+                error_log('Puock Plugin - 构建文章数据失败：' . $e->getMessage());
+                throw new Exception('无法构建文章数据：' . $cid);
+            }
+
+            // 调试信息
+            error_log('Puock Plugin - 成功获取文章信息：');
+            error_log('文章ID：' . $post->cid);
+            error_log('文章标题：' . $post->title);
+            error_log('文章链接：' . $post->permalink);
+            error_log('文章状态：' . $post->status);
+            error_log('文章类型：' . $post->type);
+            
+            // 生成文章二维码
+            $qrCodePath = $this->generateQrCode($post->permalink, $cid);
+            
+            // 获取文章封面
+            $cover = $this->getPostCover($post);
+            error_log('获取到的封面图片URL：' . $cover);
+            
+            // 渲染海报模板
+            $this->renderTemplate('poster', [
+                'post' => $post,
+                'qrCodePath' => $qrCodePath,
+                'cover' => $cover,
+                'pluginConfig' => $this->pluginConfig
+            ]);
+        } catch (Exception $e) {
+            error_log('生成海报错误: ' . $e->getMessage());
+            throw $e;
+        }
     }
     
     // 生成二维码
     private function generateQrCode($url, $cid)
     {
+        // 引入phpqrcode库
+        require_once __DIR__ . '/phpqrcode.php';
+
         $cacheDir = defined('__TYPECHO_ROOT_DIR__')
             ? __TYPECHO_ROOT_DIR__ . DIRECTORY_SEPARATOR . 'usr' . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'qrcodes' . DIRECTORY_SEPARATOR
             : dirname(__FILE__, 4) . DIRECTORY_SEPARATOR . 'usr' . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'qrcodes' . DIRECTORY_SEPARATOR;
 
         if (!file_exists($cacheDir)) {
-            mkdir($cacheDir, 0755, true);
+            if (!@mkdir($cacheDir, 0755, true)) {
+                throw new Exception('无法创建二维码缓存目录：' . $cacheDir);
+            }
         }
 
         $qrCodeFile = $cacheDir . 'qrcode_' . $cid . '.png';
         $qrCodeUrl = rtrim($this->options->siteUrl, '/') . '/usr/cache/qrcodes/qrcode_' . $cid . '.png';
 
-        // 如果二维码已存在，直接返回本地图片URL（长期有效）
+        // 如果二维码已存在，直接返回本地图片URL
         if (file_exists($qrCodeFile)) {
             return $qrCodeUrl;
         }
 
-        // 请求新API生成二维码并保存
-        $apiUrl = 'https://api.pwmqr.com/qrcode/create/?url=' . urlencode($url) . '&down=1';
-        $qrCodeData = @file_get_contents($apiUrl);
-
-        if ($qrCodeData !== false) {
-            file_put_contents($qrCodeFile, $qrCodeData);
-            return $qrCodeUrl;
-        } else {
-            // 兜底：直接返回API图片URL，不再尝试保存
-            return $apiUrl;
+        try {
+            // 使用phpqrcode生成二维码
+            QRcode::png($url, $qrCodeFile, QR_ECLEVEL_L, 10, 2);
+            
+            if (file_exists($qrCodeFile)) {
+                return $qrCodeUrl;
+            } else {
+                throw new Exception('二维码生成失败');
+            }
+        } catch (Exception $e) {
+            // 记录错误日志
+            error_log('二维码生成错误: ' . $e->getMessage());
+            throw $e;
         }
     }
     
     // 获取文章封面
     private function getPostCover($post)
     {
+        $cover = '';
+        
         // 1. 优先使用自定义字段 cover
-        if (isset($post->fields) && isset($post->fields->cover) && !empty($post->fields->cover)) {
-            $cover = $post->fields->cover;
-        } else {
-            // 2. 尝试从内容中提取第一张图片（增强正则兼容性）
-            $cover = '';
-            if (!empty($post->content)) {
-                if (preg_match('/<img[^>]+src=["\']?([^"\' >]+)["\' >]/i', $post->content, $matches)) {
-                    $cover = $matches[1];
+        if (!empty($post->fields)) {
+            // 获取所有自定义字段
+            $fields = $post->fields;
+            if (is_array($fields)) {
+                if (isset($fields['cover'])) {
+                    $cover = $fields['cover'];
                 }
+            } else if (is_object($fields) && isset($fields->cover)) {
+                $cover = $fields->cover;
             }
         }
+
+        // 2. 如果没有自定义字段，尝试从文章内容中提取第一张图片
+        if (empty($cover) && !empty($post->content)) {
+            // 使用更严格的图片匹配规则
+            if (preg_match('/<img[\s]+[^>]*?src[\s]?=[\s\'"]*((https?:\/\/|\/)[^\'"\s>]+)[\s\'"][^>]*>/i', $post->content, $matches)) {
+                $cover = $matches[1];
+            }
+        }
+
         // 3. 如果没有找到图片，使用默认图片
         if (empty($cover)) {
             $cover = $this->options->themeUrl . '/assets/img/cover.png';
+            
+            // 输出调试信息到日志
+            error_log('Puock Plugin - 未找到文章封面，使用默认图片。文章ID：' . $post->cid);
+            if (!empty($post->fields)) {
+                error_log('Puock Plugin - 文章自定义字段：' . print_r($post->fields, true));
+            }
+            error_log('Puock Plugin - 文章内容前100字符：' . substr($post->content, 0, 100));
         }
+
         return $cover;
     }
     

@@ -6,7 +6,7 @@
   * 用于获取海报,分享二维码,赞赏,emoji,登录等功能
   * @package Puock
   * @author 老孙博客
-  * @version 1.2.0
+  * @version 1.2.2
   * @link https://www.imsun.org
   */
  class Puock_Plugin implements Typecho_Plugin_Interface
@@ -16,8 +16,6 @@
          // 注册路由时使用完整类名
          Helper::addRoute('share_reward_route_share', '/share/[cid]/', 'Puock_Action', 'share');
          Helper::addRoute('share_reward_route_share_index', '/index.php/share/[cid]/', 'Puock_Action', 'share');
-         Helper::addRoute('share_reward_route_reward', '/reward/[cid]/', 'Puock_Action', 'reward');
-         Helper::addRoute('share_reward_route_reward_index', '/index.php/reward/[cid]/', 'Puock_Action', 'reward');
          Helper::addRoute('share_reward_route_reward_nocid', '/reward/', 'Puock_Action', 'reward');
          Helper::addRoute('share_reward_route_reward_nocid_index', '/index.php/reward/', 'Puock_Action', 'reward');
          Helper::addRoute('share_reward_route_poster', '/poster/[cid]/', 'Puock_Action', 'poster');
@@ -36,22 +34,29 @@
      {
          Helper::removeRoute('share_reward_route_share');
          Helper::removeRoute('share_reward_route_share_index');
-         Helper::removeRoute('share_reward_route_reward');
-         Helper::removeRoute('share_reward_route_reward_index');
          Helper::removeRoute('share_reward_route_reward_nocid');
          Helper::removeRoute('share_reward_route_reward_nocid_index');
          Helper::removeRoute('share_reward_route_poster');
          Helper::removeRoute('share_reward_route_poster_index');
          Helper::removeRoute('share_reward_route_emoji');
          Helper::removeRoute('share_reward_route_emoji_index');
-        Helper::removeRoute('share_reward_route_login');
-        Helper::removeRoute('share_reward_route_login_index');
-        Helper::removeRoute('puock_ajaxlogin');
-        Helper::removeRoute('puock_ajaxlogin_index');
+         Helper::removeRoute('share_reward_route_login');
+         Helper::removeRoute('share_reward_route_login_index');
+         Helper::removeRoute('puock_ajaxlogin');
+         Helper::removeRoute('puock_ajaxlogin_index');
      }
     // 插件配置面板
     public static function config(Typecho_Widget_Helper_Form $form)
     {
+        // 二维码缓存路径配置
+        $qrcode_cache_path = new Typecho_Widget_Helper_Form_Element_Text(
+            'qrcode_cache_path',
+            NULL,
+            'usr/cache/qrcodes',
+            _t('二维码缓存路径'),
+            _t('相对于网站根目录的路径，默认为 usr/cache/qrcodes')
+        );
+        $form->addInput($qrcode_cache_path);
         // 支付宝二维码
         $alipay_qr = new Typecho_Widget_Helper_Form_Element_Text(
             'alipay_qr',
