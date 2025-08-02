@@ -21,30 +21,43 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
     // 通过cid查数据库获取文章链接
     private function getPermalinkByCid($cid) {
         try {
+            // 使用 Typecho 的数据库接口
             $db = Typecho_Db::get();
-            $options = Helper::options();
-            $row = $db->fetchRow($db->select()->from('table.contents')
-                ->where('cid = ? AND type = ?', $cid, 'post')
-                ->where('status = ?', 'publish'));
-
-            if ($row) {
-                // 构建文章永久链接
-                $pattern = empty($options->permalink) ? '/{year}/{month}/{day}/{slug}.html' : $options->permalink;
-                $slug = urlencode($row['slug']);
-                $date = new DateTime($row['created']);
+            
+            // 获取文章数据
+            $select = $db->select('cid', 'title', 'slug', 'created', 'type', 'status')
+                ->from('table.contents')
+                ->where('cid = ?', $cid)
+                ->where('type = ?', 'post')
+                ->where('status = ?', 'publish')
+                ->limit(1);
                 
-                $permalink = str_replace(
-                    array('{year}', '{month}', '{day}', '{slug}'),
-                    array($date->format('Y'), $date->format('m'), $date->format('d'), $slug),
-                    $pattern
-                );
-                
-                error_log('Puock Plugin - 生成文章链接：' . $permalink);
-                return rtrim($options->siteUrl, '/') . $permalink;
+            $row = $db->fetchRow($select);
+            
+            if (!$row) {
+                error_log('Puock Plugin - 未找到文章或文章未发布：' . $cid);
+                return '';
             }
             
-            error_log('Puock Plugin - 未找到文章或文章未发布：' . $cid);
-            return '';
+            // 使用 Typecho 的路由生成器获取链接
+            try {
+                $routes = Typecho_Router::get('post');
+                $routeExists = !empty($routes);
+                
+                if ($routeExists) {
+                    $permalink = Typecho_Router::url('post', $row, Helper::options()->index);
+                    error_log('Puock Plugin - 成功生成文章链接：' . $permalink);
+                    return $permalink;
+                } else {
+                    error_log('Puock Plugin - 路由规则不存在，尝试使用默认格式');
+                    $options = Helper::options();
+                    return Typecho_Common::url('/archives/' . $cid, $options->index);
+                }
+            } catch (Exception $e) {
+                error_log('Puock Plugin - 获取文章链接失败：' . $e->getMessage());
+                error_log('Puock Plugin - 错误堆栈：' . $e->getTraceAsString());
+                return '';
+            }
         } catch (Exception $e) {
             error_log('Puock Plugin - 获取文章链接失败：' . $e->getMessage());
             return '';
@@ -54,20 +67,45 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
     // 分享页面
     public function share()
     {
-        $cid = $this->request->get('cid');
-        $permalink = $this->getPermalinkByCid($cid);
+        try {
+            $cid = $this->request->get('cid');
+            if (empty($cid)) {
+                throw new Exception('缺少文章ID参数');
+            }
 
-        if (empty($permalink)) {
-            throw new Exception('未获取到文章链接，cid: ' . $cid);
-        }
+            error_log('Puock Plugin - 分享页面：尝试获取文章 ' . $cid);
+            
+            // 先验证文章是否存在
+            $db = Typecho_Db::get();
+            $post = $db->fetchRow($db->select()
+                ->from('table.contents')
+                ->where('cid = ? AND type = ?', $cid, 'post')
+                ->where('status = ?', 'publish')
+                ->limit(1));
 
-        $qrCodePath = $this->generateQrCode($permalink, $cid);
+            if (!$post) {
+                error_log('Puock Plugin - 分享页面：文章不存在或未发布 ' . $cid);
+                throw new Exception('文章不存在或未发布');
+            }
+
+            $permalink = $this->getPermalinkByCid($cid);
+            if (empty($permalink)) {
+                error_log('Puock Plugin - 分享页面：无法生成文章链接 ' . $cid);
+                throw new Exception('无法生成文章链接');
+            }
+
+            error_log('Puock Plugin - 分享页面：生成文章链接成功 ' . $permalink);
+            $qrCodePath = $this->generateQrCode($permalink, $cid);
 
         $this->renderTemplate('share', [
             'post' => (object)['permalink' => $permalink],
             'qrCodePath' => $qrCodePath,
             'pluginConfig' => $this->pluginConfig
         ]);
+    } catch (Exception $e) {
+            error_log('Puock Plugin - 分享页面错误: ' . $e->getMessage());
+            throw $e;
+        }
     }
     
     // 赞赏页面
