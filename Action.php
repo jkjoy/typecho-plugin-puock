@@ -343,6 +343,62 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
         }
     }
     
+    // 清空二维码缓存目录
+    public function cleanQrCodeCache()
+    {
+        // 检查用户权限
+        $user = Typecho_Widget::widget('Widget_User');
+        if (!$user->hasLogin() || !$user->pass('administrator', true)) {
+            // 返回未授权错误
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false,
+                'msg' => '您没有权限执行此操作'
+            ]);
+            exit;
+        }
+
+        try {
+            // 获取二维码缓存目录路径
+            $cacheDir = defined('__TYPECHO_ROOT_DIR__')
+                ? __TYPECHO_ROOT_DIR__ . DIRECTORY_SEPARATOR . 'usr' . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'qrcodes' . DIRECTORY_SEPARATOR
+                : dirname(__FILE__, 4) . DIRECTORY_SEPARATOR . 'usr' . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'qrcodes' . DIRECTORY_SEPARATOR;
+            
+            // 检查目录是否存在
+            if (!file_exists($cacheDir)) {
+                echo json_encode(['success' => true, 'msg' => '缓存目录不存在，无需清理']);
+                exit;
+            }
+            
+            // 遍历并删除目录中的所有文件
+            $files = glob($cacheDir . '*.png');
+            $count = 0;
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    if (unlink($file)) {
+                        $count++;
+                    }
+                }
+            }
+            
+            // 记录日志
+            error_log('Puock Plugin - 清理二维码缓存：已删除 ' . $count . ' 个文件');
+            
+            // 返回结果
+            echo json_encode([
+                'success' => true, 
+                'msg' => '成功清理二维码缓存，共删除 ' . $count . ' 个文件'
+            ]);
+        } catch (Exception $e) {
+            error_log('Puock Plugin - 清理二维码缓存失败: ' . $e->getMessage());
+            echo json_encode([
+                'success' => false, 
+                'msg' => '清理缓存失败：' . $e->getMessage()
+            ]);
+        }
+        exit;
+    }
+
     // 实现接口要求的方法
     public function action() {}
 }

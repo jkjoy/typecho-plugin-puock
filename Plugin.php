@@ -6,7 +6,7 @@
   * 用于获取海报,分享二维码,赞赏,emoji,登录等功能
   * @package Puock
   * @author 老孙博客
-  * @version 1.2.2
+  * @version 1.2.3
   * @link https://www.imsun.org
   */
  class Puock_Plugin implements Typecho_Plugin_Interface
@@ -26,6 +26,7 @@
          Helper::addRoute('share_reward_route_login_index', '/index.php/login/', 'Puock_Action', 'login');
          Helper::addRoute('puock_ajaxlogin', '/ajaxlogin/', 'Puock_Action', 'ajaxlogin');
          Helper::addRoute('puock_ajaxlogin_index', '/index.php/ajaxlogin/', 'Puock_Action', 'ajaxlogin');
+         Helper::addRoute('puock_clean_qrcode_cache', '/action/puock', 'Puock_Action', 'cleanQrCodeCache');
 
          return '插件激活成功，请配置二维码信息';
      }
@@ -44,6 +45,7 @@
          Helper::removeRoute('share_reward_route_login_index');
          Helper::removeRoute('puock_ajaxlogin');
          Helper::removeRoute('puock_ajaxlogin_index');
+         Helper::removeRoute('puock_clean_qrcode_cache');
      }
     // 插件配置面板
     public static function config(Typecho_Widget_Helper_Form $form)
@@ -57,6 +59,48 @@
             _t('相对于网站根目录的路径，默认为 usr/cache/qrcodes')
         );
         $form->addInput($qrcode_cache_path);
+        
+        // 添加清理缓存按钮
+        $cleanCache = new Typecho_Widget_Helper_Form_Element_Submit(
+            'cleanCache',
+            NULL,
+            '清理二维码缓存',
+            NULL,
+            NULL
+        );
+        $cleanCache->input->setAttribute('class', 'btn primary');
+        $cleanCache->input->setAttribute('style', 'margin-bottom: 20px;');
+        $cleanCache->input->setAttribute('onclick', 'cleanQrCodeCache(); return false;');
+        $form->addItem($cleanCache);
+        
+        // 添加清理缓存的 JavaScript
+        echo '<script>
+        function cleanQrCodeCache() {
+            if (!confirm("确定要清理二维码缓存吗？")) {
+                return;
+            }
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", "' . Helper::options()->index . '/action/puock?do=cleanQrCodeCache", true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState == 4) {
+                    try {
+                        var response = JSON.parse(xhr.responseText);
+                        alert(response.msg);
+                        if (response.success) {
+                            window.location.reload();
+                        }
+                    } catch(e) {
+                        if (xhr.status === 403) {
+                            alert("没有权限执行此操作");
+                        } else {
+                            alert("操作失败，请检查系统日志");
+                        }
+                    }
+                }
+            };
+            xhr.send();
+        }
+        </script>';
         // 支付宝二维码
         $alipay_qr = new Typecho_Widget_Helper_Form_Element_Text(
             'alipay_qr',
