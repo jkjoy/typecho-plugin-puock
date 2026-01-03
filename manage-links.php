@@ -77,7 +77,7 @@ include 'menu.php';
                                     <td><input type="checkbox" value="<?php echo $link['lid']; ?>" name="lid[]"/></td>
                                     <td><a href="<?php echo $request->makeUriByRequest('lid=' . $link['lid']); ?>" title="<?php _e('点击编辑'); ?>"><?php echo $link['name']; ?></a>
                                     <td><?php echo $link['url']; ?></td>
-                                    <td><?php echo $link['sort'] === 'home' ? _t('是') : _t('否'); ?></td>
+                                    <td><?php echo $link['sort'] === 'home' ? _t('✔') : _t('×'); ?></td>
                                     <td><?php
                                         if ($link['image']) {
                                             echo '<a href="'.$link['image'].'" title="'._t('点击放大').'" target="_blank"><img class="avatar" src="'.$link['image'].'" alt="'.$link['name'].'" width="32" height="32"/></a>';

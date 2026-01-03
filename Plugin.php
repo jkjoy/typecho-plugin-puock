@@ -359,7 +359,7 @@
             array('' => _t('否'), 'home' => _t('是')),
             '',
             _t('是否首页显示'),
-            _t('选择“是”时保存为 home，选择“否”则保持为空')
+            _t('选择“是”时在首页显示，选择“否”则不显示')
         );
         $form->addInput($sort);
 
@@ -438,7 +438,7 @@
             $image->addRule('url', _t('不是一个合法的图片地址'));
             $name->addRule('maxLength', _t('友链名称最多包含50个字符'), 50);
             $url->addRule('maxLength', _t('友链地址最多包含200个字符'), 200);
-            $sort->addRule('maxLength', _t('是否首页显示最多包含50个字符'), 50);
+            $sort->addRule('maxLength', _t('是否首页显示'), 50);
             $email->addRule('maxLength', _t('友链邮箱最多包含50个字符'), 50);
             $image->addRule('maxLength', _t('友链图片最多包含200个字符'), 200);
             $description->addRule('maxLength', _t('友链描述最多包含200个字符'), 200);
