@@ -6,7 +6,7 @@
   * 用于获取海报,分享二维码,赞赏,emoji,登录等功能,同时集成友情链接管理
   * @package Puock
   * @author 老孙博客
-  * @version 1.2.5
+  * @version 1.3.0
   * @link https://www.imsun.org
   */
  class Puock_Plugin implements Typecho_Plugin_Interface
@@ -271,7 +271,7 @@
         $type = explode('_', $installDb->getAdapterName());
         $type = array_pop($type);
         $prefix = $installDb->getPrefix();
-        $scripts = file_get_contents('usr/plugins/Puock/' . $type . '.sql');
+        $scripts = file_get_contents('usr/plugins/Puock/sql/' . $type . '.sql');
         $scripts = str_replace('typecho_', $prefix, $scripts);
         $scripts = str_replace('%charset%', 'utf8', $scripts);
         $scripts = explode(';', $scripts);
@@ -481,7 +481,7 @@
         }
         $db = Typecho_Db::get();
         $prefix = $db->getPrefix();
-        $nopic_url = Typecho_Common::url('usr/plugins/Puock/nopic.png', $options->siteUrl);
+        $nopic_url = Typecho_Common::url('usr/plugins/Puock/img/nopic.png', $options->siteUrl);
         $sql = $db->select()->from($prefix . 'links');
         if ($sort) {
             $sql = $sql->where('sort=?', $sort);
@@ -497,7 +497,7 @@
             if ($link['image'] == null) {
                 $link['image'] = $nopic_url;
                 if ($link['email'] != null) {
-                    $link['image'] = 'https://gravatar.helingqi.com/wavatar/' . md5($link['email']) . '?s=' . $size . '&d=mm';
+                    $link['image'] = 'https://cn.cravatar.com/avatar/' . md5($link['email']) . '?s=' . $size . '&d=mm';
                 }
             }
             if ($link['state'] == 1) {
