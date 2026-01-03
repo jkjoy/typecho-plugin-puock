@@ -353,8 +353,14 @@
         $url = new Typecho_Widget_Helper_Form_Element_Text('url', null, "http://", _t('友链地址*'));
         $form->addInput($url);
 
-        /** 友链分类 */
-        $sort = new Typecho_Widget_Helper_Form_Element_Text('sort', null, null, _t('友链分类'), _t('建议以英文字母开头，只包含字母与数字'));
+        /** 是否首页显示（值：home / 空） */
+        $sort = new Typecho_Widget_Helper_Form_Element_Select(
+            'sort',
+            array('' => _t('否'), 'home' => _t('是')),
+            '',
+            _t('是否首页显示'),
+            _t('选择“是”时保存为 home，选择“否”则保持为空')
+        );
         $form->addInput($sort);
 
         /** 友链邮箱 */
@@ -403,7 +409,7 @@
 
             $name->value($link['name']);
             $url->value($link['url']);
-            $sort->value($link['sort']);
+            $sort->value($link['sort'] === 'home' ? 'home' : '');
             $email->value($link['email']);
             $image->value($link['image']);
             $description->value($link['description']);
@@ -432,7 +438,7 @@
             $image->addRule('url', _t('不是一个合法的图片地址'));
             $name->addRule('maxLength', _t('友链名称最多包含50个字符'), 50);
             $url->addRule('maxLength', _t('友链地址最多包含200个字符'), 200);
-            $sort->addRule('maxLength', _t('友链分类最多包含50个字符'), 50);
+            $sort->addRule('maxLength', _t('是否首页显示最多包含50个字符'), 50);
             $email->addRule('maxLength', _t('友链邮箱最多包含50个字符'), 50);
             $image->addRule('maxLength', _t('友链图片最多包含200个字符'), 200);
             $description->addRule('maxLength', _t('友链描述最多包含200个字符'), 200);

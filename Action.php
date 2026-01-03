@@ -414,7 +414,8 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
 
         /** 过滤XSS */
         $link['name'] = $this->request->filter('xss')->name;
-        $link['sort'] = $this->request->filter('xss')->sort;
+        $link['sort'] = $this->request->filter('trim', 'xss')->sort;
+        $link['sort'] = ($link['sort'] === 'home') ? 'home' : '';
         $link['description'] = $this->request->filter('xss')->description;
         $link['user'] = $this->request->filter('xss')->user;
         $link['order'] = $db->fetchObject($db->select(array('MAX(order)' => 'maxOrder'))->from($prefix . 'links'))->maxOrder + 1;
@@ -451,7 +452,8 @@ class Puock_Action extends Typecho_Widget implements Widget_Interface_Do
 
         /** 过滤XSS */
         $link['name'] = $this->request->filter('xss')->name;
-        $link['sort'] = $this->request->filter('xss')->sort;
+        $link['sort'] = $this->request->filter('trim', 'xss')->sort;
+        $link['sort'] = ($link['sort'] === 'home') ? 'home' : '';
         $link['description'] = $this->request->filter('xss')->description;
         $link['user'] = $this->request->filter('xss')->user;
 
