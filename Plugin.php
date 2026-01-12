@@ -3,10 +3,10 @@
  
  /**
   * Puock主题专用插件
-  * 用于获取海报,分享二维码,赞赏,emoji,登录等功能,同时集成友情链接管理
+  * 集成友情链接管理
   * @package Puock
   * @author 老孙博客
-  * @version 1.3.0
+  * @version 1.4.0
   * @link https://www.imsun.org
   */
  class Puock_Plugin implements Typecho_Plugin_Interface
@@ -24,21 +24,6 @@
          Typecho_Plugin::factory('Widget_Abstract_Comments')->contentEx = array('Puock_Plugin', 'parse');
          Typecho_Plugin::factory('Widget_Archive')->callLinks = array('Puock_Plugin', 'output_str');
 
-         // 注册路由时使用完整类名
-         Helper::addRoute('share_reward_route_share', '/share/[cid]/', 'Puock_Action', 'share');
-         Helper::addRoute('share_reward_route_share_index', '/index.php/share/[cid]/', 'Puock_Action', 'share');
-         Helper::addRoute('share_reward_route_reward_nocid', '/reward/', 'Puock_Action', 'reward');
-         Helper::addRoute('share_reward_route_reward_nocid_index', '/index.php/reward/', 'Puock_Action', 'reward');
-         Helper::addRoute('share_reward_route_poster', '/poster/[cid]/', 'Puock_Action', 'poster');
-         Helper::addRoute('share_reward_route_poster_index', '/index.php/poster/[cid]/', 'Puock_Action', 'poster');
-         Helper::addRoute('share_reward_route_emoji', '/emoji/', 'Puock_Action', 'emoji');
-         Helper::addRoute('share_reward_route_emoji_index', '/index.php/emoji/', 'Puock_Action', 'emoji');
-         Helper::addRoute('share_reward_route_login', '/login/', 'Puock_Action', 'login');
-         Helper::addRoute('share_reward_route_login_index', '/index.php/login/', 'Puock_Action', 'login');
-         Helper::addRoute('puock_ajaxlogin', '/ajaxlogin/', 'Puock_Action', 'ajaxlogin');
-         Helper::addRoute('puock_ajaxlogin_index', '/index.php/ajaxlogin/', 'Puock_Action', 'ajaxlogin');
-         Helper::addRoute('puock_clean_qrcode_cache', '/action/puock', 'Puock_Action', 'cleanQrCodeCache');
-
          return _t('插件激活成功，请配置二维码信息。') . $info;
      }
  
@@ -47,20 +32,6 @@
          // 移除友情链接功能
          Helper::removeAction('puock-links');
          Helper::removePanel(3, 'Puock/manage-links.php');
-
-         Helper::removeRoute('share_reward_route_share');
-         Helper::removeRoute('share_reward_route_share_index');
-         Helper::removeRoute('share_reward_route_reward_nocid');
-         Helper::removeRoute('share_reward_route_reward_nocid_index');
-         Helper::removeRoute('share_reward_route_poster');
-         Helper::removeRoute('share_reward_route_poster_index');
-         Helper::removeRoute('share_reward_route_emoji');
-         Helper::removeRoute('share_reward_route_emoji_index');
-         Helper::removeRoute('share_reward_route_login');
-         Helper::removeRoute('share_reward_route_login_index');
-         Helper::removeRoute('puock_ajaxlogin');
-         Helper::removeRoute('puock_ajaxlogin_index');
-         Helper::removeRoute('puock_clean_qrcode_cache');
      }
     // 插件配置面板
     public static function config(Typecho_Widget_Helper_Form $form)
@@ -134,127 +105,55 @@
         </style>';
 
         // ========== 友情链接配置 ==========
-        echo '<div class="section-title">🔗 友情链接配置</div>';
+        echo '<div class="section-title">友情链接配置</div>';
         echo '<div class="section-description">
             <strong>管理友链：</strong>点击【管理】→【友情链接】进入管理页面<br>
             友情链接功能已集成到本插件中，支持拖拽排序、分类管理、邮箱头像等功能。
         </div>';
 
-        // 隐藏的友链输出模式配置（保留默认值以便功能正常工作）
-        $pattern_text = new Typecho_Widget_Helper_Form_Element_Hidden(
+        // ========== 友情链接输出配置（原先为隐藏项） ==========
+        echo '<div class="section-title">友情链接输出配置</div>';
+        echo '<div class="section-description">
+            以下配置用于自定义 <code>&lt;links&gt;</code> 标签或 <code>Puock_Plugin::output()</code> 输出的 HTML 模板。<br>
+            可用变量：<code>{lid}</code> <code>{name}</code> <code>{url}</code> <code>{sort}</code> <code>{title}</code> <code>{description}</code> <code>{image}</code> <code>{user}</code> <code>{size}</code>
+        </div>';
+
+        $pattern_text = new Typecho_Widget_Helper_Form_Element_Textarea(
             'pattern_text',
             null,
-            '<li><a href="{url}" title="{title}" target="_blank" rel="noopener">{name}</a></li>'
+            '<li><a href="{url}" title="{title}" target="_blank" rel="noopener">{name}</a></li>',
+            _t('文字模式模板（SHOW_TEXT）'),
+            _t('用于纯文字友链输出，支持以上变量替换。')
         );
         $form->addInput($pattern_text);
 
-        $pattern_img = new Typecho_Widget_Helper_Form_Element_Hidden(
+        $pattern_img = new Typecho_Widget_Helper_Form_Element_Textarea(
             'pattern_img',
             null,
-            '<li><a href="{url}" title="{title}" target="_blank" rel="noopener"><img src="{image}" alt="{name}" width="{size}" height="{size}" /></a></li>'
+            '<li><a href="{url}" title="{title}" target="_blank" rel="noopener"><img src="{image}" alt="{name}" width="{size}" height="{size}" /></a></li>',
+            _t('图片模式模板（SHOW_IMG）'),
+            _t('用于图片友链输出，{image} 会在未设置图片时自动回退到默认图片或邮箱头像。')
         );
         $form->addInput($pattern_img);
 
-        $pattern_mix = new Typecho_Widget_Helper_Form_Element_Hidden(
+        $pattern_mix = new Typecho_Widget_Helper_Form_Element_Textarea(
             'pattern_mix',
             null,
-            '<li><a href="{url}" title="{title}" target="_blank" rel="noopener"><img src="{image}" alt="{name}" width="{size}" height="{size}" /><span>{name}</span></a></li>'
+            '<li><a href="{url}" title="{title}" target="_blank" rel="noopener"><img src="{image}" alt="{name}" width="{size}" height="{size}" /><span>{name}</span></a></li>',
+            _t('图文混合模板（SHOW_MIX）'),
+            _t('用于图文混排输出，适合带头像+名称的展示样式。')
         );
         $form->addInput($pattern_mix);
 
-        $dsize = new Typecho_Widget_Helper_Form_Element_Hidden(
+        $dsize = new Typecho_Widget_Helper_Form_Element_Text(
             'dsize',
-            NULL,
-            '32'
+            null,
+            '32',
+            _t('默认头像尺寸'),
+            _t('当未传入 size 参数时使用；用于邮箱头像或图片宽高（单位：px）。')
         );
+        $dsize->addRule('isInteger', _t('默认头像尺寸必须为整数'));
         $form->addInput($dsize);
-
-        // ========== 二维码和支付配置 ==========
-        echo '<div class="section-title">📱 二维码和支付配置</div>';
-        echo '<div class="section-description">
-            配置海报生成、分享二维码的相关参数，以及支付宝和微信的收款二维码。
-        </div>';
-
-        // 二维码缓存路径配置
-        $qrcode_cache_path = new Typecho_Widget_Helper_Form_Element_Text(
-            'qrcode_cache_path',
-            NULL,
-            'usr/cache/qrcodes',
-            _t('二维码缓存路径'),
-            _t('相对于网站根目录的路径，默认为 usr/cache/qrcodes')
-        );
-        $form->addInput($qrcode_cache_path);
-        
-        // 添加清理缓存按钮
-        $cleanCache = new Typecho_Widget_Helper_Form_Element_Submit(
-            'cleanCache',
-            NULL,
-            '清理二维码缓存',
-            NULL,
-            NULL
-        );
-        $cleanCache->input->setAttribute('class', 'btn');
-        $cleanCache->input->setAttribute('style', 'margin-bottom: 20px; background-color: #dc3545; border-color: #dc3545; color: white;');
-        $cleanCache->input->setAttribute('onclick', 'cleanQrCodeCache(); return false;');
-        $form->addItem($cleanCache);
-        
-        // 添加清理缓存的 JavaScript
-        echo '<script>
-        function cleanQrCodeCache() {
-            if (!confirm("确定要清理二维码缓存吗？")) {
-                return;
-            }
-            var xhr = new XMLHttpRequest();
-            xhr.open("GET", "' . Helper::options()->index . '/action/puock?do=cleanQrCodeCache", true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState == 4) {
-                    try {
-                        var response = JSON.parse(xhr.responseText);
-                        alert(response.msg);
-                        if (response.success) {
-                            window.location.reload();
-                        }
-                    } catch(e) {
-                        if (xhr.status === 403) {
-                            alert("没有权限执行此操作");
-                        } else {
-                            alert("操作失败，请检查系统日志");
-                        }
-                    }
-                }
-            };
-            xhr.send();
-        }
-        </script>';
-        // 支付宝二维码
-        $alipay_qr = new Typecho_Widget_Helper_Form_Element_Text(
-            'alipay_qr',
-            NULL,
-            NULL,
-            _t('支付宝收款二维码URL'),
-            _t('请输入支付宝收款二维码的完整URL地址')
-        );
-        $form->addInput($alipay_qr);
-        
-        // 微信二维码
-        $wechat_qr = new Typecho_Widget_Helper_Form_Element_Text(
-            'wechat_qr',
-            NULL,
-            NULL,
-            _t('微信收款二维码URL'),
-            _t('请输入微信收款二维码的完整URL地址')
-        );
-        $form->addInput($wechat_qr);
-        
-        // 网站Logo
-        $site_logo = new Typecho_Widget_Helper_Form_Element_Text(
-            'site_logo',
-            NULL,
-            NULL,
-            _t('网站Logo URL'),
-            _t('用于海报生成的网站Logo，留空则使用默认Logo')
-        );
-        $form->addInput($site_logo);
     }
         
     // 个人用户的配置面板
@@ -472,18 +371,30 @@
         if (!isset($options->plugins['activated']['Puock'])) {
             return _t('Puock插件未激活');
         }
+
+        $defaultPatternText = '<li><a href="{url}" title="{title}" target="_blank" rel="noopener">{name}</a></li>';
+        $defaultPatternImg = '<li><a href="{url}" title="{title}" target="_blank" rel="noopener"><img src="{image}" alt="{name}" width="{size}" height="{size}" /></a></li>';
+        $defaultPatternMix = '<li><a href="{url}" title="{title}" target="_blank" rel="noopener"><img src="{image}" alt="{name}" width="{size}" height="{size}" /><span>{name}</span></a></li>';
+        $defaultSize = isset($settings->dsize) ? intval($settings->dsize) : 32;
+        if ($defaultSize <= 0) {
+            $defaultSize = 32;
+        }
+
         //验证默认参数
         $pattern = !empty($params[0]) && is_string($params[0]) ? $params[0] : 'SHOW_TEXT';
         $links_num = !empty($params[1]) && is_numeric($params[1]) ? $params[1] : 0;
         $sort = !empty($params[2]) && is_string($params[2]) ? $params[2] : null;
-        $size = !empty($params[3]) && is_numeric($params[3]) ? $params[3] : $settings->dsize;
+        $size = !empty($params[3]) && is_numeric($params[3]) ? intval($params[3]) : $defaultSize;
+        if ($size <= 0) {
+            $size = $defaultSize;
+        }
         $mode = isset($params[4]) ? $params[4] : 'FUNC';
         if ($pattern == 'SHOW_TEXT') {
-            $pattern = $settings->pattern_text . "\n";
+            $pattern = (isset($settings->pattern_text) ? $settings->pattern_text : $defaultPatternText) . "\n";
         } elseif ($pattern == 'SHOW_IMG') {
-            $pattern = $settings->pattern_img . "\n";
+            $pattern = (isset($settings->pattern_img) ? $settings->pattern_img : $defaultPatternImg) . "\n";
         } elseif ($pattern == 'SHOW_MIX') {
-            $pattern = $settings->pattern_mix . "\n";
+            $pattern = (isset($settings->pattern_mix) ? $settings->pattern_mix : $defaultPatternMix) . "\n";
         }
         $db = Typecho_Db::get();
         $prefix = $db->getPrefix();
@@ -551,5 +462,4 @@
             return $text;
         }
     }
-
 }
