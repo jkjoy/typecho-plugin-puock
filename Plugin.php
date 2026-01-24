@@ -4,9 +4,10 @@
  /**
   * Puock主题专用插件
   * 集成友情链接管理
+  * 集成瞬间管理
   * @package Puock
   * @author 老孙博客
-  * @version 1.4.0
+  * @version 1.4.3
   * @link https://www.imsun.org
   */
  class Puock_Plugin implements Typecho_Plugin_Interface
@@ -15,16 +16,22 @@
      {
          // 安装友情链接数据表
          $info = Puock_Plugin::linksInstall();
+         // 安装瞬间数据表
+         $info .= '<br>' . Puock_Plugin::momentsInstall();
 
          // 注册友情链接功能
          Helper::addPanel(3, 'Puock/manage-links.php', _t('友情链接'), _t('管理友情链接'), 'administrator');
          Helper::addAction('puock-links', 'Puock_Action');
+         Helper::addPanel(3, 'Puock/manage-moments.php', _t('瞬间'), _t('管理瞬间'), 'administrator');
+         Helper::addPanel(2, 'Puock/manage-moments-edit.php', _t('撰写瞬间'), _t('撰写瞬间'), 'administrator');
+         Helper::addAction('puock-moments', 'Puock_Action');
+         Helper::addRoute('puock_api_v1_memo', '/api/v1/memo', 'Puock_Action', 'memoApi');
          Typecho_Plugin::factory('Widget_Abstract_Contents')->contentEx = array('Puock_Plugin', 'parse');
          Typecho_Plugin::factory('Widget_Abstract_Contents')->excerptEx = array('Puock_Plugin', 'parse');
          Typecho_Plugin::factory('Widget_Abstract_Comments')->contentEx = array('Puock_Plugin', 'parse');
          Typecho_Plugin::factory('Widget_Archive')->callLinks = array('Puock_Plugin', 'output_str');
 
-         return _t('插件激活成功，请配置二维码信息。') . $info;
+         return _t('插件激活成功，请配置插件信息。') . $info;
      }
  
      public static function deactivate()
@@ -32,6 +39,11 @@
          // 移除友情链接功能
          Helper::removeAction('puock-links');
          Helper::removePanel(3, 'Puock/manage-links.php');
+         // 移除瞬间功能
+         Helper::removeAction('puock-moments');
+         Helper::removePanel(3, 'Puock/manage-moments.php');
+         Helper::removePanel(2, 'Puock/manage-moments-edit.php');
+         Helper::removeRoute('puock_api_v1_memo');
      }
     // 插件配置面板
     public static function config(Typecho_Widget_Helper_Form $form)
@@ -230,6 +242,442 @@
             }
             throw new Typecho_Plugin_Exception(_t('友情链接插件启用失败。错误号：') . $code);
         }
+    }
+
+    // ========== Moments 瞬间功能方法 ==========
+
+    /**
+     * 安装瞬间数据表
+     */
+    public static function momentsInstall()
+    {
+        $installDb = Typecho_Db::get();
+        $type = explode('_', $installDb->getAdapterName());
+        $type = array_pop($type);
+        $prefix = $installDb->getPrefix();
+        $scripts = file_get_contents('usr/plugins/Puock/sql/Moments_' . $type . '.sql');
+        $scripts = str_replace('typecho_', $prefix, $scripts);
+        $scripts = str_replace('%charset%', 'utf8', $scripts);
+        $scripts = explode(';', $scripts);
+
+        try {
+            foreach ($scripts as $script) {
+                $script = trim($script);
+                if ($script) {
+                    $installDb->query($script, Typecho_Db::WRITE);
+                }
+            }
+            return _t('建立瞬间数据表，瞬间功能启用成功');
+        } catch (Typecho_Db_Exception $e) {
+            $code = $e->getCode();
+            if (('Mysql' == $type && (1050 == $code || '42S01' == $code)) ||
+                ('SQLite' == $type && ('HY000' == $code || 1 == $code))
+            ) {
+                return _t('检测到瞬间数据表，瞬间功能启用成功');
+            }
+            throw new Typecho_Plugin_Exception(_t('数据表建立失败，瞬间功能启用失败。错误号：') . $code);
+        }
+    }
+
+    /**
+     * 瞬间表单生成
+     */
+    public static function momentsForm($action = null)
+    {
+        $form = new Typecho_Widget_Helper_Form(
+            Helper::security()->getIndex('/action/puock-moments'),
+            Typecho_Widget_Helper_Form::POST_METHOD
+        );
+
+        $id = new Typecho_Widget_Helper_Form_Element_Hidden('id');
+        $form->addInput($id);
+
+        $content = new Typecho_Widget_Helper_Form_Element_Textarea('content', null, null, _t('内容*'));
+        $content->input->setAttribute('id', 'text');
+        $content->input->setAttribute('class', 'w-100 mono wmd-input');
+        $content->input->setAttribute('rows', '14');
+        $form->addInput($content);
+
+        $visibility = new Typecho_Widget_Helper_Form_Element_Select(
+            'visibility',
+            array('PUBLIC' => _t('公开'), 'PRIVATE' => _t('私密')),
+            'PUBLIC',
+            _t('可见性')
+        );
+        $form->addInput($visibility);
+
+        $pinned = new Typecho_Widget_Helper_Form_Element_Select(
+            'pinned',
+            array('0' => _t('否'), '1' => _t('是')),
+            '0',
+            _t('置顶')
+        );
+        $form->addInput($pinned);
+
+        $do = new Typecho_Widget_Helper_Form_Element_Hidden('do');
+        $form->addInput($do);
+
+        if ('update' === $action) {
+            $do->value('updateMoment');
+        } else {
+            $do->value('insertMoment');
+        }
+
+        $submit = new Typecho_Widget_Helper_Form_Element_Submit('submit', null, _t('提交'));
+        $form->addItem($submit);
+
+        $request = Typecho_Request::getInstance();
+        if (isset($request->id) && 'insert' != $action) {
+            $db = Typecho_Db::get();
+            $prefix = $db->getPrefix();
+            $moment = $db->fetchRow($db->select()->from($prefix . 'moments')->where('id = ?', $request->id));
+            if (!$moment) {
+                throw new Typecho_Widget_Exception(_t('瞬间不存在'), 404);
+            }
+
+            $content->value($moment['content']);
+            $visibility->value($moment['visibility']);
+            $pinned->value($moment['pinned']);
+            $do->value('updateMoment');
+            $id->value($moment['id']);
+            $submit->value(_t('编辑瞬间'));
+            $_action = 'update';
+        } else {
+            $do->value('insertMoment');
+            $submit->value(_t('增加瞬间'));
+            $_action = 'insert';
+        }
+
+        if (empty($action)) {
+            $action = $_action;
+        }
+
+        if ('insert' == $action || 'update' == $action) {
+            $content->addRule('required', _t('必须填写内容'));
+        }
+
+        return $form;
+    }
+
+    private static function momentContentToHtml(string $content, string $render = 'markdown'): string
+    {
+        $options = Typecho_Widget::widget('Widget_Options');
+        $charset = !empty($options->charset) ? (string)$options->charset : 'UTF-8';
+
+        $render = strtolower(trim($render));
+        if ($render !== 'markdown' && $render !== 'text') {
+            $render = 'markdown';
+        }
+
+        if ($render === 'markdown' && class_exists('\\Utils\\Markdown')) {
+            $html = \Utils\Markdown::convert($content);
+            return Typecho_Common::removeXSS($html);
+        }
+
+        return nl2br(htmlspecialchars($content, ENT_QUOTES, $charset));
+    }
+
+    /**
+     * 主题侧获取瞬间列表（不走 API）
+     *
+     * @param int $limit 每页条数，<=0 不限制
+     * @param int $page 页码，从 1 开始
+     * @param string $visibility PUBLIC / PRIVATE / ALL
+     * @return array
+     */
+    public static function momentsFetch(int $limit = 20, int $page = 1, string $visibility = 'PUBLIC'): array
+    {
+        $db = Typecho_Db::get();
+        $prefix = $db->getPrefix();
+        $options = Typecho_Widget::widget('Widget_Options');
+
+        $visibility = strtoupper(trim($visibility));
+        if ($visibility === '') {
+            $visibility = 'PUBLIC';
+        }
+
+        $sql = $db->select()
+            ->from($prefix . 'moments')
+            ->where('rowStatus = ?', 'NORMAL');
+
+        if ($visibility !== 'ALL') {
+            $visibility = in_array($visibility, ['PUBLIC', 'PRIVATE'], true) ? $visibility : 'PUBLIC';
+            $sql->where('visibility = ?', $visibility);
+        }
+
+        $sql->order('pinned', Typecho_Db::SORT_DESC)
+            ->order('displayTs', Typecho_Db::SORT_DESC)
+            ->order('id', Typecho_Db::SORT_DESC);
+
+        if ($limit > 0) {
+            $page = max(1, (int)$page);
+            $sql->limit((int)$limit)->offset(($page - 1) * (int)$limit);
+        }
+
+        $moments = $db->fetchAll($sql);
+        if (empty($moments)) {
+            return [];
+        }
+
+        $creatorIds = [];
+        foreach ($moments as $moment) {
+            if (!empty($moment['creatorId'])) {
+                $creatorIds[] = (int)$moment['creatorId'];
+            }
+        }
+        $creatorIds = array_values(array_unique($creatorIds));
+
+        $userMap = [];
+        if (!empty($creatorIds)) {
+            $users = $db->fetchAll(
+                $db->select('uid', 'name', 'screenName', 'mail', 'url')
+                    ->from($prefix . 'users')
+                    ->where('uid IN ?', $creatorIds)
+            );
+            foreach ($users as $u) {
+                $uid = (int)$u['uid'];
+                $mail = isset($u['mail']) ? (string)$u['mail'] : '';
+                $url = isset($u['url']) ? trim((string)$u['url']) : '';
+                $userMap[$uid] = [
+                    'username' => (string)($u['name'] ?? ''),
+                    'screenName' => (string)($u['screenName'] ?? ''),
+                    'url' => $url !== '' ? $url : (string)$options->siteUrl,
+                    'avatar' => Typecho_Common::gravatarUrl($mail, 80, null, 'mm', true),
+                ];
+            }
+        }
+
+        foreach ($moments as &$moment) {
+            $uid = !empty($moment['creatorId']) ? (int)$moment['creatorId'] : 0;
+            $moment['creatorUsername'] = $userMap[$uid]['username'] ?? '';
+            $moment['creatorName'] = $userMap[$uid]['screenName'] ?? $moment['creatorUsername'];
+            $moment['creatorUrl'] = $userMap[$uid]['url'] ?? (string)$options->siteUrl;
+            $moment['creatorAvatar'] = $userMap[$uid]['avatar'] ?? Typecho_Common::gravatarUrl('', 80, null, 'mm', true);
+        }
+        unset($moment);
+
+        return $moments;
+    }
+
+    private static function momentSplitTextAndImages(string $content): array
+    {
+        $text = (string)$content;
+        $images = [];
+
+        // Markdown image: ![alt](url "title")
+        if (preg_match_all('/!\\[[^\\]]*\\]\\((\\S+?)(?:\\s+\"[^\"]*\")?\\)/', $text, $m)) {
+            foreach ($m[1] as $url) {
+                $images[] = (string)$url;
+            }
+        }
+        $text = preg_replace('/!\\[[^\\]]*\\]\\((\\S+?)(?:\\s+\"[^\"]*\")?\\)/', '', $text);
+
+        // HTML image: <img src="...">
+        if (preg_match_all('/<img\\b[^>]*\\bsrc\\s*=\\s*([\"\\\'])(.*?)\\1[^>]*>/i', $content, $m2)) {
+            foreach ($m2[2] as $url) {
+                $images[] = (string)$url;
+            }
+        }
+        $text = preg_replace('/<img\\b[^>]*>/i', '', $text);
+
+        $images = array_values(array_unique(array_filter(array_map('trim', $images))));
+
+        $safeImages = [];
+        foreach ($images as $url) {
+            if ($url === '') {
+                continue;
+            }
+            if (preg_match('#^(https?:)?//#i', $url)) {
+                $safeImages[] = $url;
+                continue;
+            }
+            if (preg_match('#^https?://#i', $url)) {
+                $safeImages[] = $url;
+                continue;
+            }
+        }
+
+        return [
+            'text' => trim($text),
+            'images' => $safeImages,
+        ];
+    }
+
+    private static function momentBuildMediaHtml(array $imageUrls): string
+    {
+        if (empty($imageUrls)) {
+            return '';
+        }
+
+        $out = '';
+        foreach ($imageUrls as $url) {
+            $safeUrl = htmlspecialchars((string)$url, ENT_QUOTES, 'UTF-8');
+            $out .= '<a href="' . $safeUrl . '" target="_blank" rel="nofollow noopener">'
+                . '<img src="' . $safeUrl . '" class="lazy" data-src="' . $safeUrl . '" alt="" />'
+                . '</a>';
+        }
+        return $out;
+    }
+
+    /**
+     * 按 Puock 主题结构输出瞬间列表（不走 API）
+     *
+     * @param int $limit
+     * @param int $page
+     * @param string $visibility PUBLIC / PRIVATE / ALL
+     * @param string $render markdown / text
+     * @param string $mode 传入 'HTML' 返回字符串，否则直接 echo
+     * @return string|null
+     */
+    public static function momentsOutputPuock(
+        int $limit = 20,
+        int $page = 1,
+        string $visibility = 'PUBLIC',
+        string $render = 'markdown',
+        string $mode = ''
+    ) {
+        $options = Typecho_Widget::widget('Widget_Options');
+        if (!isset($options->plugins['activated']['Puock'])) {
+            $msg = _t('Puock插件未激活');
+            if ($mode === 'HTML') {
+                return $msg;
+            }
+            echo $msg;
+            return null;
+        }
+
+        $moments = self::momentsFetch($limit, $page, $visibility);
+        if (empty($moments)) {
+            if ($mode === 'HTML') {
+                return '';
+            }
+            return null;
+        }
+
+        $out = '';
+        foreach ($moments as $moment) {
+            $id = (int)($moment['id'] ?? 0);
+            $displayTs = !empty($moment['displayTs']) ? (int)$moment['displayTs'] : 0;
+            $display = $displayTs > 0 ? date('Y-m-d H:i', $displayTs) : '';
+
+            $creatorAvatar = htmlspecialchars((string)($moment['creatorAvatar'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $creatorName = htmlspecialchars((string)($moment['creatorName'] ?? ''), ENT_QUOTES, 'UTF-8');
+
+            $raw = isset($moment['content']) ? (string)$moment['content'] : '';
+            $split = self::momentSplitTextAndImages($raw);
+            $textHtml = self::momentContentToHtml((string)$split['text'], $render);
+            $mediaHtml = self::momentBuildMediaHtml((array)$split['images']);
+
+            $out .= '<div class="mb20 puock-text moments-item" id="moment-' . $id . '">'
+                . '<div class="row">'
+                . '<div class="col-12 col-md-1">'
+                . '<span class="meta ta3">'
+                . '<div class="avatar mb10">'
+                . '<img src="' . $creatorAvatar . '" class="lazy md-avatar mt-1" data-src="' . $creatorAvatar . '" alt="' . $creatorName . '" title="' . $creatorName . '">'
+                . '</div>'
+                . '<div class="t-line-1 info fs12">' . $creatorName . '</div>'
+                . '</span>'
+                . '</div>'
+                . '<div class="col-12 col-md-11">'
+                . '<div class="p-block moment-content-box"><span class="al"></span>'
+                . '<div class="mt10 moment-content entry-content show-link-icon">'
+                . $textHtml
+                . '<div class="resimg">' . $mediaHtml . '</div>'
+                . '</div>'
+                . '<div class="mt10 moment-footer p-flex-s-right"><span class="t-sm c-sub">'
+                . '<span class="mr-2"><i class="fa-regular fa-clock mr-1"></i>' . htmlspecialchars($display, ENT_QUOTES, 'UTF-8') . '</span>'
+                . '</span></div>'
+                . '</div>'
+                . '</div>'
+                . '</div>'
+                . '</div>' . "\n";
+        }
+
+        if ($mode === 'HTML') {
+            return $out;
+        }
+
+        echo $out;
+        return null;
+    }
+
+    /**
+     * 主题侧直接输出瞬间 HTML（不走 API）
+     *
+     * @param string $pattern 模板，支持变量：{id} {content} {contentMd} {display} {displayTs} {displayIso} {creatorName} {creatorUsername} {visibility} {pinned}
+     * @param int $limit
+     * @param int $page
+     * @param string $visibility PUBLIC / PRIVATE / ALL
+     * @param string $render markdown / text
+     * @param string $mode 传入 'HTML' 返回字符串，否则直接 echo
+     * @return string|null
+     */
+    public static function momentsOutput(
+        string $pattern = '',
+        int $limit = 20,
+        int $page = 1,
+        string $visibility = 'PUBLIC',
+        string $render = 'markdown',
+        string $mode = ''
+    ) {
+        $options = Typecho_Widget::widget('Widget_Options');
+        if (!isset($options->plugins['activated']['Puock'])) {
+            $msg = _t('Puock插件未激活');
+            if ($mode === 'HTML') {
+                return $msg;
+            }
+            echo $msg;
+            return null;
+        }
+
+        if (trim($pattern) === '') {
+            $pattern = '<div class="puock-moment" id="moment-{id}">'
+                . '<div class="puock-moment-content">{content}</div>'
+                . '<div class="puock-moment-meta">'
+                . '<span class="puock-moment-time">{display}</span>'
+                . '</div>'
+                . '</div>' . "\n";
+        } else {
+            $pattern .= "\n";
+        }
+
+        $charset = !empty($options->charset) ? (string)$options->charset : 'UTF-8';
+        $moments = self::momentsFetch($limit, $page, $visibility);
+
+        $out = '';
+        foreach ($moments as $moment) {
+            $displayTs = !empty($moment['displayTs']) ? (int)$moment['displayTs'] : 0;
+            $display = $displayTs > 0 ? date('Y-m-d H:i', $displayTs) : '';
+            $displayIso = $displayTs > 0 ? date('c', $displayTs) : '';
+
+            $contentRaw = isset($moment['content']) ? (string)$moment['content'] : '';
+            $contentHtml = self::momentContentToHtml($contentRaw, $render);
+            $contentMd = htmlspecialchars($contentRaw, ENT_QUOTES, $charset);
+
+            $out .= str_replace(
+                ['{id}', '{content}', '{contentMd}', '{display}', '{displayTs}', '{displayIso}', '{creatorName}', '{creatorUsername}', '{visibility}', '{pinned}'],
+                [
+                    (string)(int)($moment['id'] ?? 0),
+                    $contentHtml,
+                    $contentMd,
+                    htmlspecialchars($display, ENT_QUOTES, $charset),
+                    (string)$displayTs,
+                    htmlspecialchars($displayIso, ENT_QUOTES, $charset),
+                    htmlspecialchars((string)($moment['creatorName'] ?? ''), ENT_QUOTES, $charset),
+                    htmlspecialchars((string)($moment['creatorUsername'] ?? ''), ENT_QUOTES, $charset),
+                    htmlspecialchars((string)($moment['visibility'] ?? ''), ENT_QUOTES, $charset),
+                    (string)(int)($moment['pinned'] ?? 0),
+                ],
+                $pattern
+            );
+        }
+
+        if ($mode === 'HTML') {
+            return $out;
+        }
+
+        echo $out;
+        return null;
     }
 
     /**
