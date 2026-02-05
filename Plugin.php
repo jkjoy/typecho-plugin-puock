@@ -7,7 +7,7 @@
   * 集成瞬间管理
   * @package Puock
   * @author 老孙博客
-  * @version 1.4.3
+ * @version 1.4.4
   * @link https://www.imsun.org
   */
  class Puock_Plugin implements Typecho_Plugin_Interface
@@ -34,17 +34,30 @@
          return _t('插件激活成功，请配置插件信息。') . $info;
      }
  
-     public static function deactivate()
-     {
-         // 移除友情链接功能
-         Helper::removeAction('puock-links');
-         Helper::removePanel(3, 'Puock/manage-links.php');
-         // 移除瞬间功能
-         Helper::removeAction('puock-moments');
-         Helper::removePanel(3, 'Puock/manage-moments.php');
-         Helper::removePanel(2, 'Puock/manage-moments-edit.php');
-         Helper::removeRoute('puock_api_v1_memo');
-     }
+    public static function deactivate()
+    {
+        // 移除友情链接功能
+        Helper::removeAction('puock-links');
+        Helper::removePanel(3, 'Puock/manage-links.php');
+        // 移除瞬间功能
+        Helper::removeAction('puock-moments');
+        Helper::removePanel(3, 'Puock/manage-moments.php');
+        Helper::removePanel(2, 'Puock/manage-moments-edit.php');
+        Helper::removeRoute('puock_api_v1_memo');
+
+        $options = Typecho_Widget::widget('Widget_Options');
+        $settings = $options->plugin('Puock');
+
+        $dropLinks = isset($settings->drop_links_on_deactivate) && (string)$settings->drop_links_on_deactivate === '1';
+        $dropMoments = isset($settings->drop_moments_on_deactivate) && (string)$settings->drop_moments_on_deactivate === '1';
+
+        if ($dropLinks) {
+            Puock_Plugin::linksDrop();
+        }
+        if ($dropMoments) {
+            Puock_Plugin::momentsDrop();
+        }
+    }
     // 插件配置面板
     public static function config(Typecho_Widget_Helper_Form $form)
     {
@@ -166,6 +179,28 @@
         );
         $dsize->addRule('isInteger', _t('默认头像尺寸必须为整数'));
         $form->addInput($dsize);
+
+        // ========== 禁用时清理配置 ==========
+
+        $dropLinks = new Typecho_Widget_Helper_Form_Element_Radio(
+            'drop_links_on_deactivate',
+            array('0' => _t('不删除'), '1' => _t('删除')),
+            '0',
+            _t('<div class="section-title">禁用时清理配置</div><div class="section-description">
+            选择是否在<strong>禁用插件</strong>时删除对应数据表。此操作会永久清空数据，请谨慎选择。
+        </div>禁用时删除友情链接表'),
+            _t('勾选“删除”后，禁用插件时会删除友情链接数据表（不可恢复）。')
+        );
+        $form->addInput($dropLinks);
+
+        $dropMoments = new Typecho_Widget_Helper_Form_Element_Radio(
+            'drop_moments_on_deactivate',
+            array('0' => _t('不删除'), '1' => _t('删除')),
+            '0',
+            _t('禁用时删除瞬间表'),
+            _t('勾选“删除”后，禁用插件时会删除瞬间数据表（不可恢复）。')
+        );
+        $form->addInput($dropMoments);
     }
         
     // 个人用户的配置面板
@@ -244,6 +279,20 @@
         }
     }
 
+    /**
+     * 删除友情链接数据表
+     */
+    public static function linksDrop()
+    {
+        $db = Typecho_Db::get();
+        $prefix = $db->getPrefix();
+        try {
+            $db->query('DROP TABLE IF EXISTS `' . $prefix . 'links`', Typecho_Db::WRITE);
+        } catch (Typecho_Db_Exception $e) {
+            // 忽略异常，避免影响插件禁用
+        }
+    }
+
     // ========== Moments 瞬间功能方法 ==========
 
     /**
@@ -276,6 +325,20 @@
                 return _t('检测到瞬间数据表，瞬间功能启用成功');
             }
             throw new Typecho_Plugin_Exception(_t('数据表建立失败，瞬间功能启用失败。错误号：') . $code);
+        }
+    }
+
+    /**
+     * 删除瞬间数据表
+     */
+    public static function momentsDrop()
+    {
+        $db = Typecho_Db::get();
+        $prefix = $db->getPrefix();
+        try {
+            $db->query('DROP TABLE IF EXISTS `' . $prefix . 'moments`', Typecho_Db::WRITE);
+        } catch (Typecho_Db_Exception $e) {
+            // 忽略异常，避免影响插件禁用
         }
     }
 
